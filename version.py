@@ -1,0 +1,1 @@
+VERSION = "0.0.2"  # Versión publicada en GitHub (la compara /actualizacion)

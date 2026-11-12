@@ -1,0 +1,147 @@
+/* --- Panel de descargas (columna derecha) --- */
+
+/* Barra de scroll fina ("thin") con los verdes de la app */
+#Lista-Descargas {
+    scrollbar-width: thin;            /* Firefox: barra fina */
+    scrollbar-color: #198754 #d1e7dd; /* Firefox: pulgar verde sobre riel claro */
+}
+
+#Lista-Descargas::-webkit-scrollbar { width: 6px; } /* Chrome/Edge: 6 px de ancho */
+
+#Lista-Descargas::-webkit-scrollbar-track {
+    background: #d1e7dd; /* Riel verde claro (success-subtle) */
+    border-radius: 999px;
+}
+
+#Lista-Descargas::-webkit-scrollbar-thumb {
+    background: #198754; /* Pulgar verde (success) */
+    border-radius: 999px;
+}
+
+#Lista-Descargas::-webkit-scrollbar-thumb:hover { background: #146c43; }
+
+/* --- Tarjeta de cada descarga --- */
+
+/* Autor - Título: negrita y más pequeño para que quepa en el panel estrecho */
+.Descarga-Nombre {
+    min-width: 0; /* Permite recortar el texto con puntos suspensivos */
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+/* Cabecera: nombre a la izquierda y × para quitarlo del historial a la derecha */
+.Descarga-Cabecera {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.Descarga-Cabecera .Descarga-Nombre { flex: 1 1 auto; }
+
+/* Badge de estado: centrado vertical y horizontal debajo del título */
+.Descarga-Estado {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.25rem;
+}
+
+.Descarga-Badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Vista compacta: una sola línea con el nombre y el icono de estado */
+.Descarga-Item-Compacta .Descarga-Nombre { flex: 1 1 auto; }
+
+.Descarga-Icono {
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Botón × para quitar una entrada del historial (no borra el archivo) */
+.Descarga-Eliminar {
+    border: 0;
+    background: none;
+    padding: 0 0.15rem;
+    font-size: 0.9rem;
+    line-height: 1;
+    color: #adb5bd;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.Descarga-Eliminar:hover { color: #dc3545; }
+
+/* "Limpiar todo" junto al título HISTORIAL */
+.Descarga-Limpiar {
+    border: 0;
+    background: none;
+    padding: 0;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #198754;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.Descarga-Limpiar:hover { color: #146c43; }
+
+/* Título de cada grupo (EN CURSO / EN COLA / HISTORIAL) */
+.Descarga-Grupo { font-size: 0.68rem; }
+
+/* Radios de vista (Detallada / Compacta) */
+.Descarga-Vistas .btn {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.375rem;
+}
+
+/* Detalle (%, archivo, hora): más pequeño que el título */
+.Descarga-Detalle { font-size: 0.7rem; }
+
+/* Notas de la release dentro del modal de actualización */
+.Notas-Actualizacion {
+    max-height: 130px;
+    overflow-y: auto;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+/* --- Animaciones --- */
+
+/* La barra sigue las actualizaciones de 0,1 s (Bootstrap tarda 0,6 s por defecto) */
+.Descarga-Item .progress-bar { transition: width 0.15s linear; }
+
+/* La tarjeta recién terminada se resalta en verde y se apaga */
+.Descarga-Completada { animation: descarga-completada 1.4s ease-out; }
+
+@keyframes descarga-completada {
+    0%   { background-color: #d1e7dd; }
+    100% { background-color: transparent; }
+}
+
+/* Copia del badge que vuela hasta el botón de la carpeta (estilo Chrome) */
+.Descarga-Volando {
+    position: fixed;
+    z-index: 2100;
+    margin: 0;
+    pointer-events: none;
+}
+
+/* Latido del botón de carpeta cuando llega la descarga */
+.Carpeta-Pulso { animation: carpeta-pulso 0.9s cubic-bezier(0.3, 0, 0.2, 1); }
+
+@keyframes carpeta-pulso {
+    0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.45); }
+    35%  { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(25, 135, 84, 0.18); }
+    100% { transform: scale(1);    box-shadow: 0 0 0 14px rgba(25, 135, 84, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .Descarga-Completada,
+    .Carpeta-Pulso { animation: none; }
+}

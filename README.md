@@ -38,8 +38,8 @@ Instalación de dependencias, clonación del repositorio y ejecución:
 pip install Flask yt-dlp mutagen requests
 
 # Clonar el repositorio
-git clone https://github.com/EdgardSk8/Descargador-de-Canciones-de-Youtube.git
-cd Descargador-de-Canciones-de-Youtube
+git clone https://github.com/EdgardSk8/Downloader-Music-Youtube.git
+cd Downloader-Music-Youtube
 
 # Ejecutar la aplicación (usar SIEMPRE el entorno virtual .venv)
 .venv\Scripts\python.exe app.py

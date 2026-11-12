@@ -1,0 +1,17 @@
+# Entornos y dependencias
+.venv/
+node/
+__pycache__/
+*.pyc
+
+# Artefactos de compilación
+build/
+dist/
+temp/
+
+# Secretos y datos locales (NO subir)
+cookies.txt
+
+# Sistema
+Thumbs.db
+desktop.ini
