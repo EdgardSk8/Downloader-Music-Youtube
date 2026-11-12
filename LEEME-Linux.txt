@@ -1,0 +1,56 @@
+YouTube Music Downloader — Linux
+================================
+
+Descarga audio de YouTube en M4A (con carátula y metadatos). En Linux no abre
+una ventana propia: usa tu navegador.
+
+Requisitos (una sola vez)
+-------------------------
+Necesita FFmpeg y Node.js instalados en el sistema:
+
+    Debian / Ubuntu / Mint:   sudo apt install ffmpeg nodejs
+    Fedora:                   sudo dnf install ffmpeg nodejs
+    Arch / Manjaro:           sudo pacman -S ffmpeg nodejs
+
+Uso
+---
+1. Guarda el archivo descargado en tu carpeta personal, por ejemplo:
+
+       mkdir -p ~/Apps
+       mv Downloader.Music.Youtube.v*.linux-x86_64 ~/Apps/
+
+   Déjalo en una carpeta donde puedas escribir: la actualización automática
+   reemplaza el propio binario (no sirve en rutas de solo lectura como /opt).
+
+2. Dale permiso de ejecución (una sola vez):
+
+       chmod +x ~/Apps/Downloader.Music.Youtube.v*.linux-x86_64
+
+3. Ejecútalo:
+
+       ~/Apps/Downloader.Music.Youtube.v*.linux-x86_64
+
+4. El navegador se abre solo en http://127.0.0.1:5000
+   Deja la terminal abierta: si la cierras, la app se cierra.
+   Para salir: Ctrl+C en la terminal.
+   Si el navegador no se abre, entra a mano a http://127.0.0.1:5000
+
+Dónde quedan las cosas
+----------------------
+- Canciones:  ~/Downloads/DownloaderMusic
+- Historial:  ~/.config/DownloaderMusic/historial.json
+- cookies.txt (opcional): junto al binario, solo si YouTube pide iniciar sesión.
+
+Actualizaciones
+---------------
+La app revisa GitHub al arrancar; si hay una versión nueva la descarga y se
+reinicia sola. No hay que hacer nada más.
+
+Problemas comunes
+-----------------
+- "No se puede ejecutar el archivo": falta el paso 2 (chmod +x) o, desde el
+  gestor de archivos, clic derecho -> Propiedades -> Permitir ejecutar.
+- "ffmpeg no encontrado": instala FFmpeg (ver Requisitos).
+- "El puerto 5000 ya está en uso": ya hay otra instancia abierta; ciérrala o
+  abre http://127.0.0.1:5000
+- No descarga y pide iniciar sesión: coloca tu cookies.txt junto al binario.

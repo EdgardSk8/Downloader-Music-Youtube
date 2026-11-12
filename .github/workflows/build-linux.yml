@@ -1,0 +1,93 @@
+# Compila el binario de Linux (PyInstaller no compila cruzado desde Windows).
+#
+# - Manual: Actions -> "Compilar binario Linux" -> Run workflow (descarga el artifact).
+# - Con un tag vX.Y.Z: ademas adjunta el binario a la Release de ese tag.
+#
+# Nombre del asset: Downloader.Music.Youtube.v<version>.linux-x86_64
+# (la app lo reconoce porque contiene "linux").
+
+name: Compilar binario Linux
+
+"on":
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          # Si 3.14 no esta disponible, cambiar a "3.13".
+          python-version: "3.14"
+
+      - name: Leer version.py
+        id: version
+        run: |
+          VERSION="$(grep -oP 'VERSION\s*=\s*"\K[^"]+' version.py | head -n1)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version detectada: $VERSION"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install Flask yt-dlp mutagen pyinstaller
+
+      - name: Compilar updater y app
+        run: |
+          pyinstaller updater.spec --noconfirm
+          pyinstaller "Downloader Music Youtube v1.1.5.spec" --noconfirm
+
+      - name: Renombrar el binario
+        id: bin
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ORIGEN="dist/Downloader Music Youtube v${VERSION}"
+          DESTINO="dist/Downloader.Music.Youtube.v${VERSION}.linux-x86_64"
+          test -f "$ORIGEN"
+          mv "$ORIGEN" "$DESTINO"
+          chmod +x "$DESTINO"
+          ls -l dist
+          echo "ruta=$DESTINO" >> "$GITHUB_OUTPUT"
+
+      - name: Probar que arranca y responde
+        run: |
+          export DOWNLOADER_NO_BROWSER=1
+          export DOWNLOADER_PORT=5099
+          "./${{ steps.bin.outputs.ruta }}" &
+          PID=$!
+          for _ in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:5099/version"; then echo; OK=1; break; fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:5099/diagnostico"; echo
+          pkill -P "$PID" 2>/dev/null || true
+          kill "$PID" 2>/dev/null || true
+          test "${OK:-}" = "1"
+
+      - name: Guardar como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Downloader-Music-Youtube-linux-x86_64
+          path: |
+            ${{ steps.bin.outputs.ruta }}
+            LEEME-Linux.txt
+
+      - name: Adjuntar a la Release (solo con tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.bin.outputs.ruta }}
+            LEEME-Linux.txt

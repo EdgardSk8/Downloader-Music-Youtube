@@ -562,6 +562,126 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${horas12}:${minutos} ${sufijo}`;
     }
 
+    function formatearFechaHora(fechaIso) {
+        // Fecha completa + hora 12 h con segundos (para el modal de versiones)
+        const fecha = new Date(fechaIso);
+
+        if (Number.isNaN(fecha.getTime())) return "";
+
+        const dia = fecha.toLocaleDateString("es", {
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+        });
+
+        const horas24 = fecha.getHours();
+        const horas12 = horas24 % 12 || 12;
+        const minutos = String(fecha.getMinutes()).padStart(2, "0");
+        const segundos = String(fecha.getSeconds()).padStart(2, "0");
+        const sufijo = horas24 < 12 ? "AM" : "PM";
+
+        return `${dia}, ${horas12}:${minutos}:${segundos} ${sufijo}`;
+    }
+
+    // ------------------------------------------------------------------
+    // Versiones (parches) — ESCRITO A MANO
+    // Al publicar una versión nueva, añade aquí su entrada (arriba del todo).
+    // Formato de cada entrada:
+    //   { version: "0.0.3", fecha: "2026-11-12T13:00:00-07:00", cambios: ["..."] }
+    // "fecha" es ISO 8601 con zona horaria; se muestra en 12 h con segundos.
+    // ------------------------------------------------------------------
+    const PARCHES = [
+        {
+            version: "0.1",
+            fecha: "2026-11-12T14:22:00-07:00",
+            cambios: [
+                "Soporte para Linux: la aplicación se abre en el navegador.",
+                "Iconos redondos en la web, la aplicación y el navbar.",
+                "Aviso si falta FFmpeg o Node en el sistema."
+            ]
+        },
+        {
+            version: "0.0.3",
+            fecha: "2026-11-12T12:42:47-07:00",
+            cambios: [
+                "Mejoras de compatibilidad y de la actualización.",
+                "Nuevas secciones: términos, versiones e icono de la app."
+            ]
+        },
+        {
+            version: "0.0.2",
+            fecha: "2026-11-12T12:04:33-07:00",
+            cambios: [
+                "Mejoras en la actualización automática."
+            ]
+        },
+        {
+            version: "0.0.1",
+            fecha: "2026-11-12T12:01:42-07:00",
+            cambios: [
+                "Primera versión publicada."
+            ]
+        }
+    ];
+
+    async function mostrarParches() {
+        const contenedor = document.getElementById("Lista-Parches");
+        const versionActual = await cargarVersion();
+
+        contenedor.innerHTML = "";
+
+        if (PARCHES.length === 0) {
+            const aviso = document.createElement("p");
+            aviso.className = "small text-secondary mb-0";
+            aviso.textContent = "Todavía no hay versiones publicadas.";
+            contenedor.appendChild(aviso);
+        }
+
+        for (const parche of PARCHES) {
+            const tarjeta = document.createElement("div");
+            tarjeta.className = "Parche";
+
+            const fila = document.createElement("div");
+            fila.className = "d-flex align-items-center justify-content-between gap-2";
+
+            const titulo = document.createElement("p");
+            titulo.className = "fw-semibold mb-0";
+            titulo.textContent = `Versión ${parche.version}`;
+            fila.appendChild(titulo);
+
+            if (versionActual && parche.version === versionActual) {
+                const actual = document.createElement("span");
+                actual.className = "badge bg-success";
+                actual.textContent = "Actual";
+                fila.appendChild(actual);
+            }
+
+            const fecha = document.createElement("p");
+            fecha.className = "small text-secondary mb-1";
+            fecha.textContent = formatearFechaHora(parche.fecha);
+
+            const lista = document.createElement("ul");
+            lista.className = "small mb-0 ps-3";
+
+            for (const cambio of parche.cambios || []) {
+                const elemento = document.createElement("li");
+                elemento.textContent = cambio;
+                lista.appendChild(elemento);
+            }
+
+            tarjeta.append(fila, fecha, lista);
+            contenedor.appendChild(tarjeta);
+        }
+
+        if (!modalParches) {
+            modalParches = new bootstrap.Modal(
+                document.getElementById("modalParches")
+            );
+        }
+
+        modalParches.show();
+    }
+
     // ------------------------------------------------------------------
     // Historial: quitar una entrada o limpiarlo entero (los archivos NO se borran)
     // ------------------------------------------------------------------
@@ -588,12 +708,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function limpiarHistorial() {
-        const confirmado = confirm(
-            "¿Quitar todo el historial de descargas?\n" +
-            "Los archivos descargados NO se borran."
-        );
+        // Confirmación con modal propio (nada de confirm() nativo)
+        if (!modalLimpiar) {
+            modalLimpiar = new bootstrap.Modal(
+                document.getElementById("modalLimpiar")
+            );
+        }
 
-        if (!confirmado) return;
+        modalLimpiar.show();
+    }
+
+    async function confirmarLimpiarHistorial() {
+        if (modalLimpiar) modalLimpiar.hide();
 
         try {
             const respuesta = await fetch("/historial", { method: "DELETE" });
@@ -716,6 +842,68 @@ document.addEventListener("DOMContentLoaded", () => {
         avisoTimeout = setTimeout(() => {
             avisoCola.style.visibility = "hidden";
         }, 2500);
+    }
+
+    // Aviso persistente (Bootstrap Toast) para problemas de configuración del sistema
+    function mostrarToastError(texto) {
+        if (!window.bootstrap) {
+            console.warn(texto);
+            return;
+        }
+
+        const contenedor = document.createElement("div");
+        contenedor.className = "toast-container position-fixed bottom-0 end-0 p-3";
+        contenedor.style.zIndex = "1090";
+
+        const toast = document.createElement("div");
+        toast.className = "toast align-items-center text-bg-danger border-0";
+        toast.setAttribute("role", "alert");
+        toast.setAttribute("aria-live", "assertive");
+
+        const fila = document.createElement("div");
+        fila.className = "d-flex";
+
+        const cuerpo = document.createElement("div");
+        cuerpo.className = "toast-body";
+        cuerpo.textContent = texto;
+
+        const cerrar = document.createElement("button");
+        cerrar.type = "button";
+        cerrar.className = "btn-close btn-close-white me-2 m-auto";
+        cerrar.setAttribute("data-bs-dismiss", "toast");
+        cerrar.setAttribute("aria-label", "Cerrar");
+
+        fila.append(cuerpo, cerrar);
+        toast.append(fila);
+        contenedor.append(toast);
+        document.body.append(contenedor);
+
+        toast.addEventListener("hidden.bs.toast", () => contenedor.remove());
+        new bootstrap.Toast(toast, { autohide: false }).show(); // Se cierra solo con la X
+    }
+
+    // En Linux FFmpeg y Node no vienen incluidos (como en el instalador de Windows)
+    async function revisarHerramientas() {
+        try {
+            const respuesta = await fetch("/diagnostico");
+            if (!respuesta.ok) return;
+
+            const datos = await respuesta.json();
+
+            if (!datos.ffmpeg) {
+                mostrarToastError(
+                    "Falta FFmpeg: sin él no se puede convertir a M4A. " +
+                    "Instálalo (sudo apt install ffmpeg) o colócalo junto a la aplicación."
+                );
+            } else if (!datos.node) {
+                mostrarToastError(
+                    "Falta Node.js: algunos vídeos de YouTube lo necesitan. " +
+                    "Instálalo (sudo apt install nodejs) o colócalo junto a la aplicación."
+                );
+            }
+        } catch (error) {
+            // Servidor antiguo o sin conexión: no se avisa
+        }
     }
 
     function limpiarFormulario() {
@@ -866,6 +1054,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let modalActualizacion = null;
+    let modalTerminos = null;
+    let modalParches = null;
+    let modalLimpiar = null;
     let avisoActualizacionMostrado = false;
 
     async function comprobarActualizacion() {
@@ -1058,9 +1249,24 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Footer: términos y versiones; confirmación de limpieza con modal propio
+    document.getElementById("btn-terminos").addEventListener("click", () => {
+        if (!modalTerminos) {
+            modalTerminos = new bootstrap.Modal(
+                document.getElementById("modalTerminos")
+            );
+        }
+
+        modalTerminos.show();
+    });
+
+    document.getElementById("btn-parches").addEventListener("click", mostrarParches);
+    document.getElementById("btn-confirmar-limpiar").addEventListener("click", confirmarLimpiarHistorial);
+
     cargarVersion();
     cargarCarpeta();
     comprobarActualizacion();
+    revisarHerramientas();
 
     // Vista de descargas: guarda la elección y repinta la lista al cambiarla
     for (const radio of radiosVista) {

@@ -1,24 +1,35 @@
 /* --- Panel de descargas (columna derecha) --- */
 
-/* Barra de scroll fina ("thin") con los verdes de la app */
-#Lista-Descargas {
+/* Barra de scroll fina ("thin") con los verdes de la app.
+   Aplica a la lista de descargas y a los cuerpos de modal con scroll. */
+#Lista-Descargas,
+.modal-dialog-scrollable .modal-body,
+.Notas-Actualizacion {
     scrollbar-width: thin;            /* Firefox: barra fina */
     scrollbar-color: #198754 #d1e7dd; /* Firefox: pulgar verde sobre riel claro */
 }
 
-#Lista-Descargas::-webkit-scrollbar { width: 6px; } /* Chrome/Edge: 6 px de ancho */
+#Lista-Descargas::-webkit-scrollbar,
+.modal-dialog-scrollable .modal-body::-webkit-scrollbar,
+.Notas-Actualizacion::-webkit-scrollbar { width: 6px; } /* Chrome/Edge: 6 px */
 
-#Lista-Descargas::-webkit-scrollbar-track {
+#Lista-Descargas::-webkit-scrollbar-track,
+.modal-dialog-scrollable .modal-body::-webkit-scrollbar-track,
+.Notas-Actualizacion::-webkit-scrollbar-track {
     background: #d1e7dd; /* Riel verde claro (success-subtle) */
     border-radius: 999px;
 }
 
-#Lista-Descargas::-webkit-scrollbar-thumb {
+#Lista-Descargas::-webkit-scrollbar-thumb,
+.modal-dialog-scrollable .modal-body::-webkit-scrollbar-thumb,
+.Notas-Actualizacion::-webkit-scrollbar-thumb {
     background: #198754; /* Pulgar verde (success) */
     border-radius: 999px;
 }
 
-#Lista-Descargas::-webkit-scrollbar-thumb:hover { background: #146c43; }
+#Lista-Descargas::-webkit-scrollbar-thumb:hover,
+.modal-dialog-scrollable .modal-body::-webkit-scrollbar-thumb:hover,
+.Notas-Actualizacion::-webkit-scrollbar-thumb:hover { background: #146c43; }
 
 /* --- Tarjeta de cada descarga --- */
 
@@ -110,6 +121,30 @@
     white-space: pre-line;
     overflow-wrap: anywhere;
 }
+
+/* --- Footer y modales informativos --- */
+
+/* Enlaces del footer (Términos / Versiones) */
+.Btn-Footer {
+    border: 0;
+    background: none;
+    padding: 0;
+    font-size: 0.8rem;
+    color: #fff;
+    text-decoration: underline;
+    opacity: 0.85;
+    cursor: pointer;
+}
+
+.Btn-Footer:hover { opacity: 1; }
+
+/* Entrada de cada versión en el modal de parches */
+.Parche {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.Parche:last-child { border-bottom: 0; }
 
 /* --- Animaciones --- */
 

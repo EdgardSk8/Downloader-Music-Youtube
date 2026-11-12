@@ -1,18 +1,20 @@
 """Aplica una actualización ya descargada y reinicia la aplicación.
 
 Uso (lo lanza app.py):
-    updater.exe <nueva_version.exe> <exe_actual>
+    updater.exe <nueva_version.exe> <exe_actual>   (Windows)
+    updater     <nueva_version>     <binario>      (Linux)
 
-Espera a que la app se cierre, reemplaza el .exe y la vuelve a abrir.
+Espera a que la app se cierre, reemplaza el ejecutable y la vuelve a abrir.
 """
 
 import ctypes
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
-LOG = os.path.join(os.environ.get("TEMP", "."), "DownloaderMusicUpdate", "updater.log")
+LOG = os.path.join(tempfile.gettempdir(), "DownloaderMusicUpdate", "updater.log")
 
 
 def _log(mensaje: str):
@@ -25,27 +27,46 @@ def _log(mensaje: str):
 
 
 def _avisar(texto: str):
-    """MessageBox: updater.exe se compila con console=False (sin consola)."""
+    """Aviso de error: MessageBox en Windows; zenity/kdialog/notify-send en Linux."""
     _log(texto)
 
-    try:
-        ctypes.windll.user32.MessageBoxW(
-            None,
-            texto,
-            "Downloader Music Youtube",
-            0x10,  # MB_ICONERROR
-        )
-    except Exception:
-        pass
+    if sys.platform.startswith("win"):
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                texto,
+                "Downloader Music Youtube",
+                0x10,  # MB_ICONERROR
+            )
+        except Exception:
+            pass
+        return
+
+    for comando in (
+        ["zenity", "--error", "--title", "YouTube Music Downloader", "--text", texto],
+        ["kdialog", "--error", texto, "--title", "YouTube Music Downloader"],
+        ["notify-send", "YouTube Music Downloader", texto],
+    ):
+        try:
+            subprocess.run(comando, check=False)
+            return
+        except FileNotFoundError:
+            continue
+        except Exception:
+            break
 
 
 def _reemplazar(nuevo: str, actual: str, limite: float = 60.0) -> bool:
-    """Reemplaza el .exe esperando a que Windows libere el archivo."""
+    """Reemplaza el ejecutable esperando a que el sistema libere el archivo."""
     fin = time.time() + limite
 
     while time.time() < fin:
         try:
             os.replace(nuevo, actual)
+
+            if not sys.platform.startswith("win"):
+                os.chmod(actual, 0o755)  # Linux: conservar el permiso de ejecución
+
             return True
         except PermissionError:
             time.sleep(0.5)  # La app aún se está cerrando
@@ -65,8 +86,10 @@ def aplicar_actualizacion(nuevo: str, actual: str) -> int:
         _avisar("No se encontró la aplicación actual.")
         return 1
 
+    firma = b"MZ" if sys.platform.startswith("win") else b"\x7fELF"
+
     with open(nuevo, "rb") as archivo:
-        if archivo.read(2) != b"MZ":
+        if archivo.read(len(firma)) != firma:
             _avisar("El archivo descargado no es un ejecutable válido.")
             return 1
 
@@ -75,12 +98,22 @@ def aplicar_actualizacion(nuevo: str, actual: str) -> int:
             "No se pudo reemplazar la aplicación (seguía abierta).\n"
             "Cierra la app y vuelve a intentarlo."
         )
-        subprocess.Popen([actual], cwd=os.path.dirname(actual))
+        _relanzar(actual)
         return 1
 
     _log(f"Actualizado: {actual}")
-    subprocess.Popen([actual], cwd=os.path.dirname(actual))
+    _relanzar(actual)
     return 0
+
+
+def _relanzar(actual: str):
+    if not sys.platform.startswith("win"):
+        try:
+            os.chmod(actual, 0o755)
+        except OSError:
+            pass
+
+    subprocess.Popen([actual], cwd=os.path.dirname(actual))
 
 
 if __name__ == "__main__":

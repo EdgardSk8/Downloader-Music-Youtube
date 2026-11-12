@@ -43,7 +43,7 @@ El `.exe` final empaqueta `launcher.py` (junto con `templates/` y `static/`).
 | mutagen | `1.48.1` | Escribe metadatos del `.m4a` |
 | pywebview | `6.2.1` | Ventana nativa del .exe |
 | PyInstaller | `6.22.3` (+ hooks-contrib `2026.8`) | Empaquetado |
-| Node.js | `24.21.0` en `C:\Program Files\nodejs\node.exe` | **Ruta fija en app.py** (ver §11.2) |
+| Node.js | Portable en `node/node-v20.11.0-win-x64/node.exe` o instalado | Se busca en entorno/junto al `.exe`/portable/PATH (§11.2) |
 | Node portable del repo | `node\node-v20.11.0-win-x64\node.exe` | **No lo usa nadie actualmente** |
 | FFmpeg | En PATH: `C:\Users\Admin\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe` | **Obligatorio** para postprocesar a `.m4a` |
 | Carpeta de salida | `%USERPROFILE%\Downloads` | Definida como `DOWNLOAD_DIR` en app.py |
@@ -60,6 +60,10 @@ DownLoader Music Youtube/
 │
 ├── app.py                  ← CEREBRO del proyecto. Flask + yt-dlp + metadatos + endpoints.
 ├── launcher.py             ← Punto de entrada del .exe. Levanta Flask en un hilo + ventana pywebview.
+├── launcher_linux.py       ← Entrada en Linux: Flask + navegador (sin pywebview/GTK).
+├── build-linux.sh          ← Compila el binario Linux (updater + app) en Linux.
+├── LEEME-Linux.txt         ← Instrucciones para el usuario de Linux.
+├── .github/workflows/build-linux.yml ← CI: compila el binario Linux y lo adjunta al tag.
 ├── updater.py              ← Programa aparte que descarga e instala la nueva versión del .exe.
 ├── version.py              ← VERSION = "0.0.0"  (versión local que muestra la app).
 ├── version.json            ← Respaldo de /actualizacion: versión + URL directa del asset.
@@ -71,6 +75,7 @@ DownLoader Music Youtube/
 ├── static/
 │   ├── sinimagen.png       ← Imagen placeholder de la carátula (la usa index.html).
 │   ├── Downloader-ico.png  ← Icono original (PNG 3977×4201) del que salen los demás.
+│   ├── favicon.ico         ← Icono clásico servido en /favicon.ico (ruta propia en app.py).
 │   ├── manifest.json       ← Web app manifest (Android/iPhone: nombre, colores e iconos).
 │   ├── iconos/             ← Iconos generados: icon-32, icon-180 (Apple), icon-192,
 │   │                          icon-512 e icon-maskable-512 (Android).
@@ -91,6 +96,8 @@ DownLoader Music Youtube/
 │
 ├── Downloader Music Youtube v1.1.5.spec  ← Spec VIGENTE del .exe de la app (v1.1.5).
 ├── updater.spec                          ← Spec del updater.exe (compilación aparte).
+├── installer.iss                         ← Instalador (Inno Setup): app + ffmpeg + node.
+├── build-installer.ps1                   ← Compila el instalador con la versión de version.py.
 ├── build.spec                            ← Spec alternativo/antiguo (incluye pywebview y cookies.txt).
 ├── Descargador de Música.spec            ← ┐
 ├── Descargador-de-Musica.spec            │
@@ -169,7 +176,9 @@ HISTORIAL_PATH = %APPDATA%\DownloaderMusic\historial.json  # Historial persisten
 | Ruta | Método | Qué hace | Respuesta |
 |------|--------|----------|-----------|
 | `/` | GET | Renderiza `templates/index.html` | HTML |
+| `/favicon.ico` | GET | Sirve `static/favicon.ico` (icono del navegador) | ICO |
 | `/version` | GET | Devuelve la versión local | `{"version": "0.0.0"}` |
+| `/diagnostico` | GET | Rutas de Node/FFmpeg/cookies que está usando la app | `{"version", "congelado", "node", "ffmpeg", "cookies"}` |
 | `/carpeta` | GET | Ruta de la carpeta donde se guardan las canciones | `{"carpeta": "C:\\Users\\...\\Downloads\\DownloaderMusic"}` |
 | `/abrir-carpeta` | POST | Crea la carpeta si falta y la abre en el Explorador (botón 📁 del navbar) | `{"ok": true, "carpeta"}` |
 | `/actualizacion` | GET | Consulta la **última Release de GitHub** (API, con `version.json` como respaldo) | `{"version", "url", "mensaje", "tamano"}` |
@@ -189,6 +198,7 @@ HISTORIAL_PATH = %APPDATA%\DownloaderMusic\historial.json  # Historial persisten
 obtener_info(url)                      # yt-dlp con download=False → metadatos para la vista previa
 descargar_audio_con_progreso(url, id)  # descarga real + hook de progreso + postprocesado
 _muestrear_progreso(task_id, .part)    # lee el tamaño del .part cada 0,1 s para suavizar la barra
+_buscar_node() / _buscar_ffmpeg() / _buscar_cookies()  # rutas reales (portable/PATH/junto al .exe)
 _componer_nombre(titulo, autor)        # regla: sin guion → "Autor - Título"; con guion → tal cual
 _mejor_miniatura(info)                 # URL de la miniatura de mayor resolución
 _preparar_portada(info)                # recorta a 1:1 y escala a 1200x1200 JPEG (FFmpeg)
@@ -235,12 +245,13 @@ _cargar_historial()                    # las recupera al arrancar (interrumpidas
 | `quiet` | `True` | Sin ruido en consola |
 | `noplaylist` | `True` | Un video = una descarga |
 | `progress_hooks` | `[progreso_hook]` | Alimenta la barra de progreso del frontend |
-| `cookiefile` | `"cookies.txt"` | 🚨 Cookies de YouTube (ruta **relativa al cwd**) |
+| `cookiefile` | ruta a `cookies.txt` si existe | 🚨 Busca en entorno/junto al `.exe`/cwd; si no hay, se omite |
 | ~~`writethumbnail`~~ | — | **Eliminado**: la portada se prepara a mano con `_preparar_portada` |
-| `js_runtimes.node.executable_path` | `C:\Program Files\nodejs\node.exe` | 🔥 **Ruta FIJA**. Necesario para resolver el desafío JS de YouTube |
+| `js_runtimes.node.executable_path` | ruta de node encontrada | 🔥 Desafío JS de YouTube; se busca en entorno/junto al `.exe`/portable/PATH |
+| `ffmpeg_location` | ruta de ffmpeg encontrada | Conversión a `.m4a` y portada 1:1 (PATH o junto al `.exe`) |
 | `remote_components` | `["ejs:github"]` | 🔥 Descarga el solver EJS de GitHub (arregla el **403**) |
 | `http_headers.User-Agent` | UA de Android YouTube 17.31.35 | 🔥 Anti-bloqueo |
-| `postprocessors[0]` | `FFmpegExtractAudio` → `m4a` | Convertir a `.m4a` (requiere FFmpeg en PATH) |
+| `postprocessors[0]` | `FFmpegExtractAudio` → `m4a` | Convertir a `.m4a` (FFmpeg en PATH o junto al `.exe`) |
 | `postprocessors[1]` | `FFmpegMetadata` | Metadatos del contenedor |
 | ~~`postprocessors[2]`~~ | ~~`EmbedThumbnail`~~ | **Eliminado**: incrustaba la miniatura 16:9; ahora la carátula 1:1 la pone `_preparar_portada` + mutagen |
 
@@ -275,7 +286,7 @@ de la descarga se encarga la app (con barra de progreso, ver §6).
 | Posición | Contenido | Ejemplo |
 |----------|-----------|---------|
 | `argv[1]` | Ruta del `.exe` **nuevo** ya descargado | `%TEMP%\DownloaderMusicUpdate\nueva_version.exe` |
-| `argv[2]` | Ruta del `.exe` actual a reemplazar | `C:\...\Downloader Music Youtube v1.1.5.exe` |
+| `argv[2]` | Ruta del `.exe` actual a reemplazar | `C:\...\Downloader Music Youtube v<versión>.exe` |
 
 **Flujo:**
 
@@ -330,6 +341,12 @@ de la descarga se encarga la app (con barra de progreso, ver §6).
 - Modal `#modalActualizacion`: `#version-nueva`, `#mensaje-actualizacion` (notas con scroll),
   `#btn-actualizar`, barra `#progreso-actualizacion`/`#barra-actualizacion` y texto
   `#estado-actualizacion` (progreso de la descarga).
+- **Footer:** `© 2026`, botón `#btn-terminos` (modal `#modalTerminos`, 7 secciones de uso
+  personal/responsabilidad) y botón `#btn-parches` (modal `#modalParches` con `#Lista-Parches`,
+  que pinta el array **`PARCHES`** escrito a mano en `script.js`; ver §4.8). El botón
+  "Limpiar todo" abre `#modalLimpiar` (`#btn-confirmar-limpiar`), sin `confirm()` nativo.
+- **Iconos:** además de los `<link rel="icon">`, `favicon.ico` y `apple-touch-icon`, existe la ruta
+  `/favicon.ico` en `app.py` para los navegadores que la piden directamente.
 - Carga `static/js/script.js` al final.
 
 > ⚠️ **Los nombres de clases/IDs son el contrato con `script.js`.** Si se cambia un selector en
@@ -347,7 +364,8 @@ de la descarga se encarga la app (con barra de progreso, ver §6).
 .Btn-Buscar-Cancion, .Btn-Pegar, #youtube-url, .loading, #Informacion-Cancion,
 .Titulo-Cancion, .Informacion-Cancion-p, .Imagen-Caratula, #rename-title,
 .Btn-Descargar-Cancion, #Aviso-Cola, #Lista-Descargas, #Descargas-Vacias,
-#Contador-Descargas, #btn-abrir-carpeta, input[name="vista-descargas"]
+#Contador-Descargas, #btn-abrir-carpeta, input[name="vista-descargas"],
+#btn-terminos, #btn-parches, #btn-confirmar-limpiar, #Lista-Parches
 ```
 
 **Funciones y flujo:**
@@ -365,7 +383,10 @@ de la descarga se encarga la app (con barra de progreso, ver §6).
 | `crearIconoEstado(tarea)` | Icono de la vista compacta: `✔` verde (`descargado`), `✖` rojo (`error`), `%` mientras descarga y `#N` en cola |
 | `crearBotonEliminar(tarea)` | Botón **×** de cada tarea terminada → `quitarDelHistorial()` |
 | `quitarDelHistorial(taskId)` | `DELETE /descargas/<id>`: quita la entrada del historial (no borra el archivo) y repinta |
-| `limpiarHistorial()` | `DELETE /historial` con `confirm()`: vacía el historial (no borra archivos) |
+| `limpiarHistorial()` | Abre `#modalLimpiar` (confirmación con modal propio, **sin `confirm()` nativo**) |
+| `confirmarLimpiarHistorial()` | `DELETE /historial`: vacía el historial (no borra archivos) |
+| `formatearFechaHora(iso)` | Fecha completa + hora 12 h con segundos (modal de versiones) |
+| `mostrarParches()` | Pinta `#Lista-Parches` desde el array escrito a mano `PARCHES` (versión, fecha, cambios y badge "Actual") |
 | `aplicarVista(valor)` / `restaurarVista()` | Cambian entre vista `detallada` y `compacta`, repintan y guardan la elección en `localStorage("vistaDescargas")` |
 | `animarDescargaCompletada(item)` | Clona el badge (o el icono en vista compacta) como `.Descarga-Volando`, `position: fixed`, y lo vuela con la Web Animations API hasta `#btn-abrir-carpeta` (curva hacia arriba, 750 ms); al aterrizar pulsa el botón |
 | `pulsarCarpeta()` | Reinicia la animación `.Carpeta-Pulso` del botón 📁 (latido + halo verde) |
@@ -444,6 +465,41 @@ de la descarga se encarga la app (con barra de progreso, ver §6).
 > ⚠️ Los CSS históricos **no están enlazados** en `index.html`. Si se enlazan sin revisar,
 > `previews.css` ocultaría el panel derecho (`display: none`) y rompería la UI actual.
 
+### 4.8 Versiones (parches) — escrito a mano en `script.js`
+
+**Dónde:** en [static/js/script.js](./static/js/script.js), constante `PARCHES`, justo encima de
+`mostrarParches()`. **No hay JSON ni `fetch`**: la lista va dentro del código, así el modal
+funciona siempre (aunque falle la red o el archivo estático).
+
+**Forma:** array de objetos, con la versión más nueva primero.
+
+```js
+const PARCHES = [
+    {
+        version: "0.0.3",
+        fecha: "2026-11-13T10:30:00-07:00",
+        cambios: [
+            "Qué cambió en esta versión.",
+            "Otro cambio."
+        ]
+    },
+    // ... versiones anteriores
+];
+```
+
+| Campo | Tipo | Regla |
+|-------|------|-------|
+| `version` | texto | Debe coincidir con `VERSION` de `version.py` para que salga el badge "Actual" |
+| `fecha` | texto ISO 8601 con zona | Ej. `2026-11-12T12:04:33-07:00`. Se pinta como `12 de noviembre de 2026, 12:04:33 PM` |
+| `cambios` | array de textos | Una línea por cambio |
+
+**Cómo se muestra:** botón "Versiones" del footer → `#modalParches` → `mostrarParches()` recorre
+`PARCHES` y pinta versión, badge **Actual** (si coincide con `/version`), fecha/hora completa en
+12 h con segundos y la lista de cambios.
+
+**Al publicar una versión:** sube `VERSION` en `version.py`, **añade la entrada al principio de
+`PARCHES`**, compila y crea la Release en GitHub.
+
 ---
 
 ## 5. Flujo de ejecución
@@ -461,7 +517,7 @@ python app.py  →  Flask en 0.0.0.0:5000 con debug=True
 ### 5.2 Producción (`.exe`)
 
 ```text
-Downloader Music Youtube v1.1.5.exe
+Downloader Music Youtube v<versión>.exe   (nombre generado desde version.py)
    └─ launcher.py (congelado)
         ├─ hilo: Flask en 127.0.0.1:5000 (debug=False, sin reloader)
         └─ ventana pywebview → http://127.0.0.1:5000
@@ -517,7 +573,9 @@ GitHub Releases (latest) ──▶ /actualizacion ──▶ compara versiones en
 2. Compila primero `updater.exe` y después la app (ver §7).
 3. Crea la Release en GitHub con un tag **mayor** que la versión instalada (recomendado `v1.0.1`,
    igual que `VERSION`) y adjunta el `.exe` compilado como asset.
-4. (Opcional) actualiza [version.json](./version.json) como respaldo si la API fallara.
+4. Añade la entrada al principio de `PARCHES` en [static/js/script.js](./static/js/script.js)
+   (`version`, `fecha` ISO con zona y `cambios`) para el modal "Versiones" (ver §4.8).
+5. (Opcional) actualiza [version.json](./version.json) como respaldo si la API fallara.
 
 Las instalaciones anteriores comprueban la Release al arrancar, muestran el modal y, con un clic,
 descargan e instalan la nueva versión sin pasos manuales.
@@ -528,7 +586,7 @@ descargan e instalan la nueva versión sin pasos manuales.
 
 | Spec | Script | Incluye | Estado |
 |------|--------|---------|--------|
-| [Downloader Music Youtube v1.1.5.spec](./Downloader%20Music%20Youtube%20v1.1.5.spec) | `launcher.py` | `templates/`, `static/`, icono `Downloader-ico.ico`, `dist/updater.exe`, `console=False` | ✅ **Vigente** |
+| [Downloader Music Youtube v1.1.5.spec](./Downloader%20Music%20Youtube%20v1.1.5.spec) | `launcher.py` (Win) / `launcher_linux.py` (Linux) | `templates/`, `static/`, icono `Downloader-ico.ico`, `dist/updater.exe` (`dist/updater` en Linux), `console=False` | ✅ **Vigente** |
 | [build.spec](./build.spec) | `launcher.py` | `webview` completo (`collect_all`), `templates/`, `static/`, `cookies.txt` | ⚠️ Alternativo/antiguo (`console=True`) |
 | [updater.spec](./updater.spec) | `updater.py` | Nada extra | ✅ Vigente para `updater.exe` |
 | Resto de `.spec` en raíz | varias | — | 📦 Historial, no usar |
@@ -542,16 +600,85 @@ descargan e instalan la nueva versión sin pasos manuales.
 # 2) Compilar la app (spec vigente)
 .\.venv\Scripts\python.exe -m PyInstaller "Downloader Music Youtube v1.1.5.spec" --noconfirm
 
-# Resultado: dist\updater.exe y dist\Downloader Music Youtube v1.1.5.exe
+# 3) Instalador (opcional, requiere Inno Setup)
+.\build-installer.ps1
+
+# Resultado: dist\updater.exe, dist\Downloader Music Youtube v<VERSION>.exe
+#            y dist\Instalador YouTube Music Downloader v<VERSION>.exe
 ```
 
 > ⚠️ El spec vigente incluye `('dist/updater.exe', '.')` en `datas`, así que **hay que compilar
 > `updater.exe` primero** (si no existe, PyInstaller falla). Verificado: el exe de la app contiene
 > `updater.exe` en la raíz de `sys._MEIPASS`.
 >
-> ⚠️ `cookies.txt` **no** está en el spec v1.1.5 (sí en `build.spec`). Si yt-dlp necesita
-> cookies, el `.exe` debe encontrarlas en el **directorio de trabajo** (por eso `dist\cookies.txt`
-> existe). Ver §11.3.
+> ⚠️ `cookies.txt` **no** está en el spec v1.1.5 (sí en `build.spec`). La app lo busca junto al
+> `.exe`, en `_MEIPASS` o en el cwd (§11.3); si no lo encuentra, funciona sin cookies (algunos
+> vídeos pueden requerirlas).
+
+### 7.1 Paquete portable (PC sin Python, Node ni FFmpeg)
+
+`dist\Portable\` es una carpeta lista para copiar a otra PC (Windows 10/11 de 64 bits):
+
+| Archivo | Para qué | Tamaño |
+|---------|----------|--------|
+| `Downloader Music Youtube v<versión>.exe` | La app (Python + Flask/yt-dlp/mutagen/pywebview dentro) | ~31 MB |
+| `ffmpeg.exe` / `ffprobe.exe` | Conversión a M4A, metadatos y portada 1:1 | ~217 MB c/u |
+| `node\node.exe` | Reto JS de YouTube (EJS) | ~67 MB |
+| `LEEME.txt` | Instrucciones para el usuario final | — |
+
+- **No hace falta instalar Python ni librerías**: van dentro del `.exe`.
+- La app busca Node/FFmpeg **junto al `.exe`** (`_buscar_node`, `_buscar_ffmpeg`); si no están,
+  usa los del PATH/sistema. `cookies.txt` es opcional y va junto al `.exe` (no se distribuye).
+- La actualización automática reemplaza **solo el `.exe`**, así que `ffmpeg.exe`, `ffprobe.exe`
+  y `node\` se conservan.
+- Verificación: `GET /diagnostico` devuelve las rutas en uso (probado con PATH mínimo: encontró
+  las de la propia carpeta).
+- `dist\Downloader Music Youtube v<versión> - Portable.zip` es la misma carpeta comprimida
+  (~225 MB con el build *full* de FFmpeg; con un build *essentials* baja bastante).
+
+### 7.2 Instalador (Inno Setup)
+
+- `installer.iss` + `build-installer.ps1` generan
+  `dist\Instalador YouTube Music Downloader v<versión>.exe` (~154 MB).
+- Requiere Inno Setup 6: `winget install JRSoftware.InnoSetup`.
+- Instala **por usuario** (`PrivilegesRequired=lowest`) en
+  `%LOCALAPPDATA%\Programs\YouTube Music Downloader`, **sin administrador**; crea accesos en
+  Escritorio y menú Inicio, y desinstalador (`unins000.exe`).
+- Renombra el `.exe` a `Downloader Music Youtube.exe` (nombre estable): las actualizaciones
+  automáticas y las instalaciones nuevas no dejan ejecutables viejos.
+- Incluye `ffmpeg.exe`, `ffprobe.exe`, `node\node.exe` y `LEEME.txt`.
+- Verificado: instalación silenciosa correcta, accesos creados y, con PATH mínimo, la app
+  encuentra sus herramientas en la carpeta de instalación (`/diagnostico`).
+
+### 7.3 Linux (misma app, interfaz en el navegador)
+
+- El spec es **multiplataforma**: en Windows usa `launcher.py`, el icono `.ico` y
+  `dist/updater.exe`; en Linux usa `launcher_linux.py`, incrusta `dist/updater` y no aplica
+  icono (PyInstaller solo acepta `.ico` en Windows).
+- `build-linux.sh` crea el venv, instala dependencias y compila en orden (`updater` → app):
+
+  ```bash
+  sudo apt install ffmpeg nodejs
+  chmod +x build-linux.sh && ./build-linux.sh
+  # dist/Downloader Music Youtube v<versión>
+  ```
+
+- `launcher_linux.py` levanta Flask en un hilo, espera a que el puerto responda y abre el
+  navegador (`webbrowser.open`). `DOWNLOADER_NO_BROWSER=1` lo evita (pruebas).
+- La app vive mientras el proceso viva: hay que **dejar la terminal abierta** (Ctrl+C para salir).
+- Actualizaciones: `_asset_de_la_release()` elige el asset con `.exe` en Windows y con `linux`
+  o `.appimage` en el resto; el `updater` se ejecuta como `dist/updater`, se marca `0o755` y se
+  valida la firma `ELF` (Windows: `MZ`). El asset debe llamarse, p. ej.,
+  `Downloader.Music.Youtube.v0.0.4.linux-x86_64`.
+- Avisos del actualizador en Linux: `zenity` → `kdialog` → `notify-send` (no hay `MessageBox`).
+- ⚠️ PyInstaller **no compila cruzado**: el binario Linux debe generarse en Linux (o en CI).
+- CI incluida: [.github/workflows/build-linux.yml](./.github/workflows/build-linux.yml) compila
+  en `ubuntu-latest` con `workflow_dispatch` (deja un artifact) y en tags `v*` (además adjunta el
+  asset a la Release). El propio workflow prueba el binario con `DOWNLOADER_NO_BROWSER=1`
+  consultando `/version` y `/diagnostico` antes de publicarlo.
+- El artifact y la Release incluyen `LEEME-Linux.txt` (instrucciones para el usuario final:
+  requisitos, `chmod +x`, cómo arrancar, dónde quedan canciones e historial, actualizaciones y
+  problemas comunes). El texto no fija la versión, así que sirve para todas las releases.
 
 ---
 
@@ -560,10 +687,10 @@ descargan e instalan la nueva versión sin pasos manuales.
 | Archivo | Uso |
 |---------|-----|
 | [icono.ico](./icono.ico) | Icono del ejecutable (`icon=` del spec) |
-| [icono.png](./icono.png) | Favicon de la página (`url_for('static', filename='icono.png')`) ❗ Está en la **raíz**, no en `static/` |
+| [icono.png](./icono.png) | Icono antiguo de la raíz; ya no se usa (el favicon está en `static/`) |
 | [sinimagen.png](./static/sinimagen.png) | Placeholder de carátula |
 | [downloader.png](./downloader.png) | Referenciado por JS como fallback, pero en ruta no servida |
-| `node/node-v20.11.0-win-x64/` | Node portable versionado (no usado por el código) |
+| `node/node-v20.11.0-win-x64/` | Node portable (lo usa `_buscar_node()` si el `.exe` está en el proyecto) |
 
 > ❗ Ojo: `index.html` pide `static/icono.png`, pero el archivo `icono.png` está en la raíz del
 > proyecto (no dentro de `static/`). El favicon probablemente da 404. Está documentado, no
@@ -591,6 +718,9 @@ descargan e instalan la nueva versión sin pasos manuales.
 
 # Ejecutar con ventana nativa (como el .exe)
 .\.venv\Scripts\python.exe launcher.py
+
+# Linux: servidor + navegador por defecto
+python3 launcher_linux.py
 
 # Actualizar yt-dlp (YouTube cambia seguido; esto es mantenimiento habitual)
 .\.venv\Scripts\python.exe -m pip install -U yt-dlp
@@ -621,18 +751,20 @@ descargan e instalan la nueva versión sin pasos manuales.
 
 > Mientras el archivo siga en el repo, **no** pegarlo en issues, chats ni capturas.
 
-### 11.2 Ruta de Node fija
+### 11.2 ✅ RESUELTO — Ruta de Node y FFmpeg
 
-`app.py` usa `C:\Program Files\nodejs\node.exe` (hoy Node **24.21.0** ahí). Si el usuario final no
-tiene Node instalado en esa ruta, la descarga falla. El repo ya trae un Node portable en
-`node/node-v20.11.0-win-x64/node.exe`, pero **nadie lo usa**. Cualquier mejora debería resolver la
-ruta dinámicamente (PATH, ruta del exe empaquetado) sin romper el arreglo del 403.
+`_buscar_node()` en `app.py` busca, en orden: variable `DOWNLOADER_NODE`, `_MEIPASS`, junto al
+`.exe` (`node.exe`, `node/node.exe`, `node/node-v20.11.0-win-x64/node.exe`), `bin/`, PATH,
+`C:\Program Files\nodejs\node.exe` y `%LOCALAPPDATA%\Programs\nodejs\node.exe`. Si no lo
+encuentra, **omite** `js_runtimes` y avisa por consola. Lo mismo hace `_buscar_ffmpeg()` con
+`DOWNLOADER_FFMPEG`, junto al `.exe`, `bin/` y PATH. Para distribuir el `.exe` sin instalar Node ni
+FFmpeg, basta con dejar esas carpetas/ejecutables junto al `.exe`.
 
-### 11.3 `cookies.txt` con ruta relativa
+### 11.3 ✅ RESUELTO — cookies.txt
 
-`"cookiefile": "cookies.txt"` depende del **directorio de trabajo**. En el `.exe` de una sola
-carpeta (`onefile`), el cwd suele ser la carpeta desde donde se lanza. Si se cambia la forma de
-empaquetar o se lanza desde otro directorio, yt-dlp no encontrará las cookies.
+`_buscar_cookies()` devuelve una ruta **absoluta** (variable `DOWNLOADER_COOKIES`, junto al `.exe`,
+`_MEIPASS` o cwd) y solo entonces se asigna `cookiefile`; si no existe, yt-dlp funciona sin
+cookies. Las cookies siguen sin subirse al repo (`.gitignore`).
 
 ### 11.4 `updater.exe` fuera del spec vigente
 
@@ -656,9 +788,11 @@ El JS ya usa `ImagenVacia = "/static/sinimagen.png"` (ruta que sí sirve Flask) 
 
 Ver §4.7. No enlazar `previews.css` sin revisar `#Informacion-Cancion { display:none }`.
 
-### 11.8 `icono.png` fuera de `static/`
+### 11.8 ✅ RESUELTO — Favicon
 
-`index.html` lo busca en `static/`; el archivo está en la raíz. El favicon no funciona.
+`index.html` usa `icon-32.png`/`icon-192.png`, `apple-touch-icon` y `favicon.ico` (en `static/`),
+más la ruta `/favicon.ico` de `app.py` para los navegadores que la piden directamente. El
+`icono.png` de la raíz ya no se usa.
 
 ### 11.9 Ruta `/download_file` comentada
 

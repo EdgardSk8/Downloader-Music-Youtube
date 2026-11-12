@@ -1,11 +1,29 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+import re
+import sys
+
+# El nombre del binario sale de version.py (p. ej. "Downloader Music Youtube v0.0.3")
+_es_windows = sys.platform.startswith("win")
+_script = "launcher.py" if _es_windows else "launcher_linux.py"
+_updater = "dist/updater.exe" if _es_windows else "dist/updater"
+_icono = ["Downloader-ico.ico"] if _es_windows else []
+
+_base_spec = globals().get("SPECPATH") or os.getcwd()
+
+try:
+    with open(os.path.join(_base_spec, "version.py"), encoding="utf-8") as _archivo:
+        _version = re.search(r'VERSION\s*=\s*["\']([^"\']+)', _archivo.read()).group(1)
+except Exception:
+    _version = "dev"
+
 
 a = Analysis(
-    ['launcher.py'],
+    [_script],
     pathex=[],
     binaries=[],
-    datas=[('templates', 'templates'), ('static', 'static'), ('Downloader-ico.ico', '.'), ('dist/updater.exe', '.')],
+    datas=[('templates', 'templates'), ('static', 'static'), ('Downloader-ico.ico', '.'), (_updater, '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -22,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Downloader Music Youtube v1.1.5',
+    name=f'Downloader Music Youtube v{_version}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,5 +53,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['Downloader-ico.ico'],
+    icon=_icono,
 )

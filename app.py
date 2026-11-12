@@ -35,6 +35,83 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 ###################################################################
 
 # -------------------------------------------------------------------------------------------------
+# Búsqueda de herramientas externas (Node, FFmpeg y cookies)
+# Funciona igual desde el proyecto (desarrollo) y desde el .exe empaquetado.
+# -------------------------------------------------------------------------------------------------
+
+def _carpeta_aplicacion() -> str:
+    """Carpeta del .exe cuando está congelado; carpeta del proyecto en desarrollo."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _primer_existente(candidatos) -> str:
+    for ruta in candidatos:
+        if ruta and os.path.isfile(ruta):
+            return os.path.abspath(ruta)
+    return ""
+
+
+def _buscar_node() -> str:
+    """node.exe / node: entorno → junto al ejecutable → portable → PATH → instalación típica."""
+    app = _carpeta_aplicacion()
+    meipass = getattr(sys, "_MEIPASS", "")
+
+    return _primer_existente([
+        os.environ.get("DOWNLOADER_NODE", ""),
+        os.path.join(meipass, "node.exe") if meipass else "",
+        os.path.join(meipass, "node") if meipass else "",
+        os.path.join(app, "node.exe"),
+        os.path.join(app, "node"),
+        os.path.join(app, "node", "node.exe"),
+        os.path.join(app, "node", "node"),
+        os.path.join(app, "node", "node-v20.11.0-win-x64", "node.exe"),
+        os.path.join(app, "bin", "node.exe"),
+        os.path.join(app, "bin", "node"),
+        shutil.which("node") or "",
+        r"C:\Program Files\nodejs\node.exe",
+        os.path.join(os.environ.get("LOCALAPPDATA") or "", "Programs", "nodejs", "node.exe"),
+        "/usr/bin/node",
+        "/usr/local/bin/node",
+    ])
+
+
+def _buscar_ffmpeg() -> str:
+    """ffmpeg.exe / ffmpeg: entorno → junto al ejecutable → PATH → rutas típicas."""
+    app = _carpeta_aplicacion()
+    meipass = getattr(sys, "_MEIPASS", "")
+
+    return _primer_existente([
+        os.environ.get("DOWNLOADER_FFMPEG", ""),
+        os.path.join(meipass, "ffmpeg.exe") if meipass else "",
+        os.path.join(meipass, "ffmpeg") if meipass else "",
+        os.path.join(app, "ffmpeg.exe"),
+        os.path.join(app, "ffmpeg"),
+        os.path.join(app, "bin", "ffmpeg.exe"),
+        os.path.join(app, "bin", "ffmpeg"),
+        shutil.which("ffmpeg") or "",
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/snap/bin/ffmpeg",
+    ])
+
+
+def _buscar_cookies() -> str:
+    """cookies.txt: entorno → junto al .exe → _MEIPASS → directorio actual."""
+    app = _carpeta_aplicacion()
+    meipass = getattr(sys, "_MEIPASS", "")
+
+    return _primer_existente([
+        os.environ.get("DOWNLOADER_COOKIES", ""),
+        os.path.join(app, "cookies.txt"),
+        os.path.join(meipass, "cookies.txt") if meipass else "",
+        os.path.join(os.getcwd(), "cookies.txt"),
+    ])
+
+###################################################################
+
+# -------------------------------------------------------------------------------------------------
 # Estado de las descargas: cola + registro para la interfaz
 # -------------------------------------------------------------------------------------------------
 
@@ -242,6 +319,35 @@ def _version_release(release: dict) -> str:
     return ".".join(str(p) for p in max(versiones)) if versiones else ""
 
 
+def _asset_de_la_release(assets) -> dict | None:
+    """Elige el asset de la Release para la plataforma actual.
+
+    Windows: archivos .exe. Linux: nombre con "linux" o .AppImage.
+    """
+    es_windows = sys.platform.startswith("win")
+
+    for asset in assets:
+        nombre = str(asset.get("name", "")).lower()
+
+        if es_windows and nombre.endswith(".exe"):
+            return asset
+
+        if not es_windows and ("linux" in nombre or nombre.endswith(".appimage")):
+            return asset
+
+    return None
+
+
+def _url_de_mi_plataforma(url: str) -> bool:
+    """True si ese asset sirve en la plataforma actual (el respaldo suele ser un .exe)."""
+    nombre = urllib.parse.urlparse(url or "").path.lower()
+
+    if sys.platform.startswith("win"):
+        return nombre.endswith(".exe")
+
+    return "linux" in nombre or nombre.endswith(".appimage")
+
+
 def _info_actualizacion() -> dict:
     """Última versión publicada en GitHub: {version, url, mensaje, tamano}.
 
@@ -251,22 +357,15 @@ def _info_actualizacion() -> dict:
     try:
         release = _leer_json_remoto(URL_ULTIMA_RELEASE)
 
-        exe = next(
-            (
-                asset
-                for asset in release.get("assets", [])
-                if str(asset.get("name", "")).lower().endswith(".exe")
-            ),
-            None,
-        )
+        asset = _asset_de_la_release(release.get("assets", []))
         version = _version_release(release)
 
-        if exe and version:
+        if asset and version:
             return {
                 "version": version,
-                "url": exe.get("browser_download_url", ""),
+                "url": asset.get("browser_download_url", ""),
                 "mensaje": (release.get("body") or "").strip(),
-                "tamano": exe.get("size") or 0,
+                "tamano": asset.get("size") or 0,
             }
 
     except Exception as e:
@@ -275,10 +374,11 @@ def _info_actualizacion() -> dict:
     try:
         respaldo = _leer_json_remoto(URL_VERSION_JSON, timeout=5)
         version = _version_de_texto(respaldo.get("version"))
+        url = respaldo.get("url", "")
 
         return {
             "version": ".".join(str(p) for p in version) if version else VERSION,
-            "url": respaldo.get("url", ""),
+            "url": url if _url_de_mi_plataforma(url) else "",
             "mensaje": respaldo.get("mensaje", ""),
             "tamano": 0,
         }
@@ -328,11 +428,12 @@ def _descargar_con_progreso(url: str, destino: str):
 
 
 def _proceso_actualizacion(url: str, version: str, tamano: int, updater: str):
-    """Descarga el .exe nuevo, lanza updater.exe y cierra la app."""
+    """Descarga el ejecutable nuevo, lanza el updater y cierra la app."""
+    es_windows = sys.platform.startswith("win")
     carpeta = os.path.join(tempfile.gettempdir(), "DownloaderMusicUpdate")
     os.makedirs(carpeta, exist_ok=True)
 
-    destino = os.path.join(carpeta, "nueva_version.exe")
+    destino = os.path.join(carpeta, "nueva_version.exe" if es_windows else "nueva_version")
     parcial = destino + ".part"
 
     try:
@@ -346,23 +447,31 @@ def _proceso_actualizacion(url: str, version: str, tamano: int, updater: str):
         if tamano and peso != tamano:
             raise Exception(f"El archivo pesa {peso} bytes y se esperaban {tamano}")
 
+        firma = b"MZ" if es_windows else b"\x7fELF"
         with open(parcial, "rb") as archivo:
-            if archivo.read(2) != b"MZ":
-                raise Exception("El archivo descargado no es un .exe válido")
+            if archivo.read(len(firma)) != firma:
+                raise Exception("El archivo descargado no es un ejecutable válido")
 
         os.replace(parcial, destino)
 
-        # Limpia copias de updater.exe de actualizaciones anteriores
+        if not es_windows:
+            os.chmod(destino, 0o755)
+
+        # Limpia copias del updater de actualizaciones anteriores
         for nombre in os.listdir(carpeta):
-            if nombre.startswith("updater-") and nombre.endswith(".exe"):
+            if nombre.startswith("updater-"):
                 try:
                     os.remove(os.path.join(carpeta, nombre))
                 except OSError:
                     pass
 
         # Copia del updater fuera de _MEIPASS (esa carpeta se borra al cerrar la app)
-        updater_local = os.path.join(carpeta, f"updater-{uuid.uuid4().hex[:8]}.exe")
+        sufijo = ".exe" if es_windows else ""
+        updater_local = os.path.join(carpeta, f"updater-{uuid.uuid4().hex[:8]}{sufijo}")
         shutil.copyfile(updater, updater_local)
+
+        if not es_windows:
+            os.chmod(updater_local, 0o755)
 
         _marcar_actualizacion(
             estado="lista",
@@ -385,6 +494,17 @@ def _proceso_actualizacion(url: str, version: str, tamano: int, updater: str):
 @app.route("/version")
 def version():
     return jsonify({"version": VERSION})
+
+
+@app.route("/diagnostico")  # Herramientas externas que está usando la app (soporte/portabilidad)
+def diagnostico():
+    return jsonify({
+        "version": VERSION,
+        "congelado": bool(getattr(sys, "frozen", False)),
+        "node": _buscar_node() or None,
+        "ffmpeg": _buscar_ffmpeg() or None,
+        "cookies": _buscar_cookies() or None,
+    })
 
 
 @app.route("/carpeta") # Ruta de la carpeta donde se guardan las canciones
@@ -437,7 +557,7 @@ def obtener_info(url: str) -> dict: # Funcion para obtener la informacion del vi
 def actualizar():
     if not getattr(sys, "frozen", False):
         return jsonify({
-            "error": "La actualización automática solo funciona en el .exe"
+            "error": "La actualización automática solo funciona en la aplicación compilada"
         }), 400
 
     datos = request.get_json(silent=True) or {}
@@ -456,10 +576,11 @@ def actualizar():
             "error": "La actualización solo se descarga desde GitHub"
         }), 400
 
-    updater = os.path.join(getattr(sys, "_MEIPASS", ""), "updater.exe")
+    nombre_updater = "updater.exe" if sys.platform.startswith("win") else "updater"
+    updater = os.path.join(getattr(sys, "_MEIPASS", ""), nombre_updater)
     if not os.path.isfile(updater):
         return jsonify({
-            "error": "La aplicación no incluye updater.exe"
+            "error": f"La aplicación no incluye {nombre_updater}"
         }), 500
 
     with estado_actualizacion_lock:
@@ -615,6 +736,19 @@ def descargar_audio_con_progreso(url: str, task_id: str) -> tuple[str, dict]:
     def postproceso_hook(d): # Avisa al empezar cada postprocesador (convertir, etiquetas, carátula)
         if d.get('status') in ("started", "processing"):
             _marcar_procesando(task_id, d)
+
+    # Rutas reales de las herramientas (sin rutas fijas: funciona en cualquier PC/carpeta)
+    ruta_node = _buscar_node()
+    ruta_ffmpeg = _buscar_ffmpeg()
+    ruta_cookies = _buscar_cookies()
+
+    if not ruta_node:
+        print("[!] Node.js no encontrado: YouTube puede fallar al resolver el reto JS")
+    if not ruta_ffmpeg:
+        print("[!] FFmpeg no encontrado: la conversión a M4A fallará")
+    if not ruta_cookies:
+        print("[!] cookies.txt no encontrado: algunos vídeos pueden pedir cookies")
+
     ydl_opts = {
         "format": "bestaudio",
         "outtmpl": output_path,
@@ -624,16 +758,7 @@ def descargar_audio_con_progreso(url: str, task_id: str) -> tuple[str, dict]:
         # Hook de postprocesado: permite mostrar "Convirtiendo…" después de descargar
         "postprocessor_hooks": [postproceso_hook],
 
-        "cookiefile": "cookies.txt",
-
         # Ya no se usa "writethumbnail": la portada se prepara a mano en 1:1 con _preparar_portada
-
-        # 🔥 CLAVE: JS runtime
-        "js_runtimes": {
-            "node": {
-                "executable_path": "C:\\Program Files\\nodejs\\node.exe"
-            }
-        },
 
         # 🔥 CLAVE: solver de YouTube (ARREGLA 403)
         "remote_components": ["ejs:github"],
@@ -659,6 +784,18 @@ def descargar_audio_con_progreso(url: str, task_id: str) -> tuple[str, dict]:
             # Ahora _preparar_portada crea una carátula 1:1 de 1200x1200 y la escribe con mutagen.
         ],
     }
+
+    # Solo se añaden las opciones si la herramienta existe (si no, yt-dlp usa su criterio)
+    if ruta_cookies:
+        ydl_opts["cookiefile"] = ruta_cookies
+
+    if ruta_node:
+        ydl_opts["js_runtimes"] = {
+            "node": {"executable_path": ruta_node}
+        }
+
+    if ruta_ffmpeg:
+        ydl_opts["ffmpeg_location"] = ruta_ffmpeg
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)  # Descargar el video/audio y obtener su información
@@ -713,9 +850,9 @@ def _preparar_portada(info: dict):
     if not url:
         return None
 
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _buscar_ffmpeg()
     if not ffmpeg:
-        print("[!] FFmpeg no está en PATH: no se puede preparar la portada")
+        print("[!] FFmpeg no encontrado: no se puede preparar la portada")
         return None
 
     try:
@@ -868,6 +1005,14 @@ def _asegurar_worker(): # Inicia el hilo trabajador la primera vez que se encola
 
 @app.route("/") # Define la ruta principal
 def index(): return render_template("index.html") # Renderiza la vista Html
+
+
+@app.route("/favicon.ico")  # Los navegadores piden /favicon.ico por defecto
+def favicon():
+    return send_file(
+        os.path.join(app.static_folder, "favicon.ico"),
+        mimetype="image/vnd.microsoft.icon",
+    )
 
 # -------------------------------------------------------------------------------------------------------------------------------- #
 

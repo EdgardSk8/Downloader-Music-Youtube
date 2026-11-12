@@ -10,6 +10,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='iconos/icon-32.png') }}">
     <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='iconos/icon-192.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='iconos/icon-180.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#198754">
     <meta name="mobile-web-app-capable" content="yes">
@@ -27,7 +28,9 @@
     <!-- NAVBAR -->
     <nav class="navbar navbar-dark bg-success py-1 flex-shrink-0">
         <div class="container-fluid px-3">
-            <span class="navbar-brand fw-semibold fs-6 mb-0">
+            <span class="navbar-brand fw-semibold fs-6 mb-0 d-flex align-items-center gap-2">
+                <img src="{{ url_for('static', filename='iconos/icon-32.png') }}"
+                    alt="" width="24" height="24">
                 YouTube Music Downloader
             </span>
 
@@ -188,15 +191,23 @@
     <!-- FOOTER -->
     <footer class="bg-success text-white text-center py-1 flex-shrink-0">
 
-        <div class="container-fluid d-flex justify-content-center gap-2 flex-wrap">
+        <div class="container-fluid d-flex justify-content-center align-items-center gap-2 flex-wrap">
 
             <p class="small mb-0">
-                &copy; 2025 YouTube Music Downloader
+                &copy; 2026 YouTube Music Downloader
             </p>
 
             <p class="small opacity-75 mb-0">
                 Respeta los derechos de autor y las políticas de YouTube.
             </p>
+
+            <button type="button" id="btn-terminos" class="Btn-Footer">
+                Términos y condiciones
+            </button>
+
+            <button type="button" id="btn-parches" class="Btn-Footer">
+                Versiones
+            </button>
 
         </div>
 
@@ -248,6 +259,135 @@
                         id="btn-actualizar"
                         class="btn btn-success btn-sm">
                         Actualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL TÉRMINOS Y CONDICIONES -->
+    <div class="modal fade" id="modalTerminos" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6">Términos y condiciones</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body py-3">
+                    <p class="small text-secondary">
+                        Última actualización: 12 de noviembre de 2026
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">1. Herramienta personal</h6>
+                    <p class="small">
+                        YouTube Music Downloader es una aplicación personal, sin ánimo comercial
+                        ni de negocio. No es un servicio, no vende nada y no ofrece soporte
+                        comercial de ningún tipo.
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">2. Uso personal</h6>
+                    <p class="small">
+                        La aplicación está pensada únicamente para uso personal y privado. El
+                        usuario es el único responsable del uso que haga de ella y del contenido
+                        que descargue.
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">3. Responsabilidad del usuario</h6>
+                    <p class="small">
+                        Todas las consecuencias derivadas del uso de la aplicación recaen sobre el
+                        usuario: descargas, almacenamiento, uso posterior, infracciones de derechos
+                        de autor, incumplimiento de los Términos de Servicio de YouTube o de
+                        cualquier ley aplicable.
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">4. Sin garantías</h6>
+                    <p class="small">
+                        El software se ofrece «tal cual», sin garantías de ningún tipo. El autor no
+                        se hace responsable de daños directos o indirectos, pérdida de datos,
+                        bloqueos de cuenta, interrupciones o cualquier otro perjuicio derivado de
+                        su uso.
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">5. Contenido y derechos de autor</h6>
+                    <p class="small">
+                        La aplicación no aloja, distribuye ni comparte contenido. El usuario debe
+                        respetar los derechos de autor y las políticas de YouTube/Google. Esta
+                        aplicación no está afiliada a YouTube ni a Google.
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">6. Datos</h6>
+                    <p class="small">
+                        El historial y la configuración se guardan localmente en el equipo del
+                        usuario. La aplicación solo se conecta a YouTube (para descargar) y a
+                        GitHub (para comprobar actualizaciones).
+                    </p>
+
+                    <h6 class="fs-6 fw-semibold">7. Aceptación</h6>
+                    <p class="small mb-0">
+                        Al usar la aplicación, el usuario acepta estos términos y asume toda la
+                        responsabilidad derivada de su uso.
+                    </p>
+                </div>
+
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-success btn-sm" data-bs-dismiss="modal">
+                        Entendido
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL VERSIONES (PARCHES) -->
+    <div class="modal fade" id="modalParches" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6">Versiones (parches)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body py-3">
+                    <p class="small text-secondary">
+                        Cambios de cada versión publicada.
+                    </p>
+
+                    <div id="Lista-Parches"></div>
+                </div>
+
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL LIMPIAR HISTORIAL (confirmación, sin alert nativo) -->
+    <div class="modal fade" id="modalLimpiar" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6">Limpiar historial</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body py-3">
+                    <p class="small mb-0">
+                        Se quitarán todas las entradas del historial.<br>
+                        <strong>Los archivos descargados NO se borran.</strong>
+                    </p>
+                </div>
+
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+
+                    <button type="button" id="btn-confirmar-limpiar" class="btn btn-danger btn-sm">
+                        Limpiar historial
                     </button>
                 </div>
             </div>

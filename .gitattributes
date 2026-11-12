@@ -1,0 +1,2 @@
+# Los scripts de Linux deben conservar saltos de línea LF (CRLF rompe bash)
+*.sh text eol=lf

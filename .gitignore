@@ -1,5 +1,6 @@
 # Entornos y dependencias
 .venv/
+.venv-linux/
 node/
 __pycache__/
 *.pyc
